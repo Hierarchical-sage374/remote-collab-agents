@@ -39,6 +39,22 @@ $ remote-exec all "uptime"
 $ remote-sync push workstation-a ./model.pt /home/alice/Desktop/Share/
 [rsync] Transferred model.pt → workstation-a (256.3 MB, 12.8 MB/s)
 
+# Delegate complex work to a remote machine's AI agent
+$ remote-agent workstation-a claude -p "explain the main function in server.py"
+[INFO] Agent: claude on workstation-a
+[INFO] Working dir: ~
+The main function in server.py initializes a Flask application...
+
+# Ask a remote Codex to refactor code
+$ remote-agent workstation-b codex exec "add input validation to api.py"
+[INFO] Agent: codex on workstation-b
+Applied 3 changes to api.py
+
+# Check which agents are available across the mesh
+$ remote-agent all --info
+[workstation-a] Claude Code: v2.1.83, Codex CLI: v0.116.0, Node: v24.14.0
+[workstation-b] Claude Code: v2.1.39, Codex CLI: v0.116.0, Node: v22.22.1
+
 # Full health diagnostics across the mesh
 $ remote-collab-doctor
 [doctor] Checking 17 items across 3 machines...
@@ -55,7 +71,7 @@ Most multi-agent frameworks focus on **orchestrating LLM calls**. This one focus
 
 | What others do | What this does |
 |:---|:---|
-| Agent A calls Agent B's API | Agent A runs commands on Machine B |
+| Agent A calls Agent B's API | Agent A invokes Agent B's CLI on Machine B |
 | Shared memory / message passing | Shared filesystem via rsync + Syncthing |
 | Central orchestrator | Peer-to-peer mesh — every machine is equal |
 | Simulated environments | Real SSH on real machines |
@@ -66,8 +82,8 @@ Most multi-agent frameworks focus on **orchestrating LLM calls**. This one focus
 ┌──────────────────────┐     Tailscale VPN      ┌──────────────────────┐
 │   Workstation A       │◄─────────────────────►│   Workstation B       │
 │   ┌──────────────┐   │      SSH + rsync       │   ┌──────────────┐   │
-│   │ Claude Code  │   │                        │   │ Claude Code  │   │
-│   │   Agent      │───┼── remote-exec ────────►│   │   Agent      │   │
+│   │ Claude Code  │   │                        │   │ Claude Code  │   │                        │   │ Claude Code  │   │
+│   │   Agent      │───┼── remote-agent ───────►│   │   Agent      │   │
 │   └──────────────┘   │                        │   └──────────────┘   │
 │   ┌──────────────┐   │                        │                      │
 │   │ Human (SSH)  │   │                        │                      │
@@ -94,9 +110,11 @@ Each machine runs its own AI agent. Agents can:
 
 ## Features
 
+- **Remote agent invocation** — invoke Claude Code or Codex CLI on any machine via `remote-agent`
 - **Cross-machine command execution** — foreground, background, or broadcast to all
 - **Background task management** — PID-verified, survives SSH disconnects, with log tailing
 - **Bidirectional file sync** — rsync for on-demand, Syncthing for continuous
+- **Per-host environment bootstrapping** — auto-handles nvm, PATH, install-path differences across machines
 - **Three-tier safety model** — safe / needs-confirmation / dangerous command classification
 - **Shell injection prevention** — metacharacters always trigger human review
 - **Distributed diagnostics** — `doctor` checks SSH, Tailscale, Syncthing, scripts, PATH across all machines
@@ -176,12 +194,14 @@ remote-collab-agents/
 ├── scripts/
 │   ├── common.sh              # Shared library: config, safety, host resolution
 │   ├── remote-exec.sh         # Remote execution (fg/bg/broadcast)
+│   ├── remote-agent.sh        # Remote agent invocation (Claude Code / Codex)
 │   ├── remote-sync.sh         # rsync + Syncthing management
 │   ├── remote-wrapper.sh      # Background task lifecycle
 │   ├── doctor.sh              # Distributed health diagnostics
 │   └── setup-ssh-keys.sh      # Setup wizard (11 steps)
 ├── skills/
 │   ├── remote-exec.md         # Claude Code skill: remote execution
+│   ├── remote-agent.md        # Claude Code skill: remote agent invocation
 │   └── remote-sync.md         # Claude Code skill: file sync
 ├── docs/
 │   ├── design.md              # Architecture design
@@ -221,9 +241,11 @@ Open an [issue](https://github.com/PluteW/remote-collab-agents/issues) or submit
 
 ### 核心能力
 
+- **远程智能体调用** — 通过 `remote-agent` 在任意机器上调用 Claude Code 或 Codex CLI
 - **跨机器命令执行** — 前台、后台、广播到所有机器
 - **后台任务管理** — PID 验证、SSH 断开后存活、日志追踪
 - **双向文件同步** — rsync 按需传输、Syncthing 持续同步
+- **环境自动引导** — 自动处理各机器的 nvm、PATH、安装路径差异
 - **三级安全模型** — 安全 / 需确认 / 危险的命令分级
 - **Shell 注入防护** — 元字符始终触发人工审查
 - **分布式诊断** — doctor 检查所有机器的 SSH、Tailscale、Syncthing、脚本、PATH

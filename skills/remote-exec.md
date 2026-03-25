@@ -41,8 +41,25 @@ remote-exec all "uptime"
 1. **Safe commands** (ls, hostname, cat, etc.) — execute directly, no confirmation needed
 2. **Dangerous commands** (rm, sudo, kill, etc.) — **ask user to confirm** before executing
 3. **Shell metacharacters** (`;`, `&&`, `|`, `$()`, `>`) — **always ask user to confirm**
-4. **Complex work** — delegate to the remote host's Claude Code or Codex, not raw shell commands
+4. **Complex work** — use `remote-agent` to delegate to the remote host's Claude Code or Codex
 5. **File operations** — use `remote-sync` for file transfer, not `remote-exec` with redirection
+
+## Delegating to Remote Agents
+
+For complex tasks, use `remote-agent` instead of raw shell commands:
+
+```bash
+# Invoke Claude Code on a remote machine
+remote-agent workstation-a claude -p "explain main.py"
+
+# Invoke Codex on a remote machine
+remote-agent workstation-b codex exec "add tests"
+
+# Check agent availability across all machines
+remote-agent all --info
+```
+
+See `skills/remote-agent.md` for full documentation.
 
 ## Configured Hosts
 
